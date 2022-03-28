@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\File;
+use League\CommonMark\Extension\FrontMatter\Data\LibYamlFrontMatterParser;
+use Spatie\YamlFrontMatter\YamlFrontMatter;
 
 //We created a class called post with a static function called find. 
 //We pass the slug as a function variable, which is also a wild card
@@ -21,20 +23,46 @@ class Post
 {
     use HasFactory;
  
-    public static function all(){
-        $files = File::files(resource_path("posts/"));
+    public $title;
 
-        return array_map(fn($file)=> $file->getContents(),$files);
+    public $excerpt;
+
+    public $date;
+
+    public $body;
+
+    public function __construct($title,$excerpt,$date,$body,$slug)
+    {
+        $this->title = $title;
+        $this->exerpt = $excerpt;
+        $this->date = $date;
+        $this->body = $body;
+        $this->slug = $slug;
+    }
+
+    public static function all()
+    {
+
+        return cache()->rememberForever('posts.all', function() {
+
+            return collect(File::files(resource_path("posts")))
+            ->map(fn($file) => YamlFrontMatter::parseFile($file))
+            ->map(fn($document) => new Post (
+                    $document->title,
+                    $document->exercpt,
+                    $document->date,
+                    $document->body(),
+                    $document->slug
+            ))
+            ->sortByDesc('date');   
+
+        }); 
     }
 
 
     public static function find($slug){
 
-        if (! file_exists($path = resource_path("posts/{$slug}.html"))){
-        throw new ModelNotFoundException();
-        }
-    
-        return cache()->remember("posts.{$slug}", 1200, fn() => file_get_contents($path));
+        return static::all()->firstWhere('slug', $slug);
 
     }
 }
